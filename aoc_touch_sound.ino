@@ -110,8 +110,9 @@ void stopSound()
 void removeFromStack(uint8_t door)
 {
   uint8_t writeIndex = 0;
+  uint8_t readIndex;
 
-  for (uint8_t readIndex = 0; readIndex < playDepth; readIndex++)
+  for (readIndex = 0; readIndex < playDepth; readIndex++)
   {
     if (playStack[readIndex] != door)
     {
@@ -133,8 +134,9 @@ void removeFromStack(uint8_t door)
 uint8_t readOpenDoors()
 {
   uint8_t mask = 0;
+  uint8_t door;
 
-  for (uint8_t door = 0; door < NUM_DOORS; door++)
+  for (door = 0; door < NUM_DOORS; door++)
   {
     if (digitalRead(DOOR_PINS[door]) == HIGH)
     {
@@ -155,8 +157,9 @@ uint8_t readOpenDoors()
 uint8_t readTouches()
 {
   uint8_t mask = 0;
+  uint8_t door;
 
-  for (uint8_t door = 0; door < NUM_DOORS; door++)
+  for (door = 0; door < NUM_DOORS; door++)
   {
     if (digitalRead(TOUCH_PINS[door]) == HIGH)
     {
@@ -220,7 +223,9 @@ void handlePanelTouched(uint8_t door)
  */
 void setup()
 {
-  for (uint8_t door = 0; door < NUM_DOORS; door++)
+  uint8_t door;
+
+  for (door = 0; door < NUM_DOORS; door++)
   {
     pinMode(DOOR_PINS[door], INPUT_PULLUP);
     pinMode(TOUCH_PINS[door], INPUT);
@@ -250,10 +255,12 @@ void loop()
   uint8_t touchMask   = readTouches();
   uint8_t closedMask  = prevOpenMask & ~openMask;
   uint8_t pressedMask = touchMask & ~prevTouchMask & openMask;
+  uint8_t door;
+  uint8_t bit;
 
-  for (uint8_t door = 0; door < NUM_DOORS; door++)
+  for (door = 0; door < NUM_DOORS; door++)
   {
-    uint8_t bit = (1 << door);
+    bit = (1 << door);
 
     if (closedMask & bit)
     {
