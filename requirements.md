@@ -34,3 +34,6 @@ Example:
   
 ##  Power
 This project will be powered via a standard wall-wart (110v)
+
+##  Microcontroller selection
+Must be Arduino capable.  Thoughts are an ATTINY84, Uno, or a version of sparkfun's thing.
