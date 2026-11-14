@@ -7,17 +7,17 @@
  * when its door closes, the previously touched (still open) door's sound
  * plays again. When no touched door is open, the player is stopped.
  *
- * Target:  ATtiny84 using ATTinyCore (Tools > Board > ATtinyCore >
- *          ATtiny24/44/84(a) (No bootloader), Chip: ATtiny84,
- *          Clock: 8 MHz (internal), Pin Mapping: Clockwise).
- *          Run "Burn Bootloader" once to set the 8 MHz fuse.
+ * Target:  Arduino Uno (Tools > Board > Arduino AVR Boards > Arduino Uno).
+ *          Debug messages go out the USB serial port at 115200 baud
+ *          (Tools > Serial Monitor, set to 115200).
  *
  * Wiring:
- *   PA0..PA3  Door switches A..D to GND (internal pull-ups).
+ *   D0, D1    Reserved for USB serial debug (Serial).
+ *   D2        Serial RX  <- YX5300 TX (optional; not used by this sketch)
+ *   D3        Serial TX  -> YX5300 RX
+ *   D4..D7    Door switches A..D to GND (internal pull-ups).
  *             Switch closed (LOW) = door closed, open (HIGH) = door open.
- *   PA4..PA7  QT1010 OUT pins A..D (active HIGH while touched).
- *   PB0       Serial TX  -> YX5300 RX
- *   PB1       Serial RX  <- YX5300 TX (optional; not used by this sketch)
+ *   D8..D11   QT1010 OUT pins A..D (active HIGH while touched).
  *
  * SD card: put the sounds in folder 01 on the card, named 001xxx.mp3
  * (door A), 002xxx.mp3 (door B), 003xxx.mp3 (door C), 004xxx.mp3 (door D).
@@ -27,11 +27,13 @@
 
 const uint8_t NUM_DOORS = 4;
 
-const uint8_t DOOR_PINS[NUM_DOORS]  = { PIN_PA0, PIN_PA1, PIN_PA2, PIN_PA3 };
-const uint8_t TOUCH_PINS[NUM_DOORS] = { PIN_PA4, PIN_PA5, PIN_PA6, PIN_PA7 };
+const uint8_t DOOR_PINS[NUM_DOORS]  = { 4, 5, 6, 7 };
+const uint8_t TOUCH_PINS[NUM_DOORS] = { 8, 9, 10, 11 };
 
-const uint8_t YX_RX_PIN = PIN_PB1;
-const uint8_t YX_TX_PIN = PIN_PB0;
+const uint8_t YX_RX_PIN = 2;
+const uint8_t YX_TX_PIN = 3;
+
+const char DOOR_NAMES[NUM_DOORS] = { 'A', 'B', 'C', 'D' };
 
 /* YX5300 command codes */
 const uint8_t YX_CMD_PLAY_FOLDER_FILE = 0x0F;
@@ -41,7 +43,9 @@ const uint8_t YX_CMD_STOP             = 0x16;
 const uint8_t YX_DEVICE_TF_CARD       = 0x02;
 const uint8_t YX_SOUND_FOLDER         = 0x01;
 
-const unsigned long LOOP_DELAY_MS   = 20;   /* also serves as the debounce time */
+const unsigned long DEBUG_BAUD       = 115200;
+const unsigned long YX_BAUD          = 9600;
+const unsigned long LOOP_DELAY_MS    = 20;    /* also serves as the debounce time */
 const unsigned long YX_BOOT_DELAY_MS = 500;
 
 SoftwareSerial yxSerial(YX_RX_PIN, YX_TX_PIN);
@@ -83,6 +87,9 @@ void yxSendCommand(uint8_t cmd, uint8_t dataHigh, uint8_t dataLow)
  */
 void playSoundLooped(uint8_t door)
 {
+  Serial.print(F("Playing sound "));
+  Serial.println(DOOR_NAMES[door]);
+
   yxSendCommand(YX_CMD_PLAY_FOLDER_FILE, YX_SOUND_FOLDER, door + 1);
   yxSendCommand(YX_CMD_SINGLE_CYCLE, 0x00, 0x00);   /* 0x00 = repeat current track */
 }
@@ -95,6 +102,8 @@ void playSoundLooped(uint8_t door)
  */
 void stopSound()
 {
+  Serial.println(F("Stopping sound"));
+
   yxSendCommand(YX_CMD_STOP, 0x00, 0x00);
 }
 
@@ -183,6 +192,10 @@ void handleDoorClosed(uint8_t door)
 {
   bool wasPlaying = (playDepth > 0) && (playStack[playDepth - 1] == door);
 
+  Serial.print(F("Door "));
+  Serial.print(DOOR_NAMES[door]);
+  Serial.println(F(" closed"));
+
   removeFromStack(door);
 
   if (wasPlaying)
@@ -200,6 +213,22 @@ void handleDoorClosed(uint8_t door)
 
 
 /*
+ * handleDoorOpened
+ *
+ * Reports a door opening on the debug port. Opening a door does not start
+ * a sound by itself; the panel behind it has to be touched.
+ *
+ * door  - index of the door that just opened
+ */
+void handleDoorOpened(uint8_t door)
+{
+  Serial.print(F("Door "));
+  Serial.print(DOOR_NAMES[door]);
+  Serial.println(F(" opened"));
+}
+
+
+/*
  * handlePanelTouched
  *
  * Moves a touched door's sound to the top of the play stack and plays it.
@@ -208,6 +237,10 @@ void handleDoorClosed(uint8_t door)
  */
 void handlePanelTouched(uint8_t door)
 {
+  Serial.print(F("Panel "));
+  Serial.print(DOOR_NAMES[door]);
+  Serial.println(F(" touched"));
+
   removeFromStack(door);
   playStack[playDepth] = door;
   playDepth++;
@@ -218,8 +251,8 @@ void handlePanelTouched(uint8_t door)
 /*
  * setup
  *
- * Configures the pins, starts the serial link and gets the YX5300 ready,
- * reading from the SD card with nothing playing.
+ * Configures the pins, starts the debug and YX5300 serial links, and gets
+ * the YX5300 ready, reading from the SD card with nothing playing.
  */
 void setup()
 {
@@ -231,7 +264,10 @@ void setup()
     pinMode(TOUCH_PINS[door], INPUT);
   }
 
-  yxSerial.begin(9600);
+  Serial.begin(DEBUG_BAUD);
+  Serial.println(F("aoc_touch_sound starting"));
+
+  yxSerial.begin(YX_BAUD);
   delay(YX_BOOT_DELAY_MS);   /* let the YX5300 power up */
 
   yxSendCommand(YX_CMD_SELECT_DEVICE, 0x00, YX_DEVICE_TF_CARD);
@@ -246,13 +282,14 @@ void setup()
  * loop
  *
  * Polls the doors and touch panels, reacting to doors that have just
- * closed and panels that have just been touched (rising edge) while their
- * door is open.
+ * opened or closed and panels that have just been touched (rising edge)
+ * while their door is open.
  */
 void loop()
 {
   uint8_t openMask    = readOpenDoors();
   uint8_t touchMask   = readTouches();
+  uint8_t openedMask  = openMask & ~prevOpenMask;
   uint8_t closedMask  = prevOpenMask & ~openMask;
   uint8_t pressedMask = touchMask & ~prevTouchMask & openMask;
   uint8_t door;
@@ -262,6 +299,10 @@ void loop()
   {
     bit = (1 << door);
 
+    if (openedMask & bit)
+    {
+      handleDoorOpened(door);
+    }
     if (closedMask & bit)
     {
       handleDoorClosed(door);
