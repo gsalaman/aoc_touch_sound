@@ -232,18 +232,41 @@ void handleDoorOpened(uint8_t door)
  * handlePanelTouched
  *
  * Moves a touched door's sound to the top of the play stack and plays it.
+ * If that door's sound is already the one playing, does nothing, so the
+ * sound carries on instead of restarting.
  *
  * door  - index of the panel that was just touched (its door is open)
  */
 void handlePanelTouched(uint8_t door)
 {
+  bool alreadyPlaying = (playDepth > 0) && (playStack[playDepth - 1] == door);
+
   Serial.print(F("Panel "));
   Serial.print(DOOR_NAMES[door]);
   Serial.println(F(" touched"));
 
+  if (alreadyPlaying)
+  {
+    Serial.println(F("Already playing; ignored"));
+    return;
+  }
+
+  /*
+   * If this door was touched before, take it out of the stack first (the
+   * other entries keep their order). A door never appears twice; touching
+   * it again just moves it to the top. This also means the stack can never
+   * hold more than NUM_DOORS entries.
+   */
   removeFromStack(door);
+
+  /*
+   * Push the door onto the top of the stack. playStack lists touched doors
+   * oldest to newest, playDepth is how many entries are in use, and the
+   * last entry is the sound that is playing.
+   */
   playStack[playDepth] = door;
   playDepth++;
+
   playSoundLooped(door);
 }
 
